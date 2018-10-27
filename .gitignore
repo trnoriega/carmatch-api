@@ -1,6 +1,7 @@
 # Project specific
 
 data/
+ad_hoc/
 
 
 # Created by https://www.gitignore.io/api/python,pycharm,macos
