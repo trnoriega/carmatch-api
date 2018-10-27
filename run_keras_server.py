@@ -3,11 +3,17 @@ Based on:
 https://blog.keras.io/building-a-simple-keras-deep-learning-rest-api.html
 and,
 https://github.com/tensorflow/tensorflow/issues/14356#issuecomment-385962623
+
+To run:
+python run_keras_server.py
+
+To test:
+curl -X POST -F image=@Dodge-Ram_Pickup_3500-2009.jpg http://localhost:5000/predict
 """
 
 import io
+import json
 import os
-import pickle
 
 import flask
 from keras.models import model_from_json
@@ -22,7 +28,7 @@ WEIGHT_PATH = os.path.join(DATA_DIR,
 JSON_PATH = os.path.join(DATA_DIR,
                          'InceptionV3_21_FT3_30_40.json')
 LOOKUP_PATH = os.path.join(DATA_DIR,
-                           'I_15_lookup_dict.pkl')
+                           'lookup.json')
 
 PERCENT_CUTOFF = 95
 NUM_RESULTS = 5
@@ -32,7 +38,7 @@ IMG_WIDTH, IMG_HEIGHT = 299, 299
 app = flask.Flask(__name__)
 model = None
 graph = None
-lookup_dict = None
+lookup = None
 
 
 def load_model():
@@ -44,22 +50,22 @@ def load_model():
     model = model_from_json(model_json)
     model.load_weights(WEIGHT_PATH)
 
-    global lookup_dict
-    lookup_dict = load_lookup_dict()
+    global lookup
+    lookup = load_lookup()
 
     global graph
     graph = tf.get_default_graph()
 
 
-def load_lookup_dict():
+def load_lookup() -> dict:
     """Returns prediction lookup dictionary."""
-    # TODO this doesn't need to be a pickle object:
-    with open(LOOKUP_PATH, 'rb') as f:
-        dictionary = pickle.load(f)
+    with open(LOOKUP_PATH, 'r') as f:
+        dictionary = json.load(f)
+    dictionary = {int(key): value for key, value in dictionary.items()}
     return dictionary
 
 
-def prepare_image(image):
+def prepare_image(image: 'PIL.JpegImagePlugin.JpegImageFile') -> np.ndarray:
     """
     Converts image found in image_path to a numpy array that
     can be used by Keras model to make a prediction
@@ -74,7 +80,7 @@ def prepare_image(image):
     return image
 
 
-def load_predictions(image):
+def load_predictions(image: np.ndarray) -> list:
     """Loads predictions made by model
 
     :param image: Image to predict.
@@ -82,7 +88,8 @@ def load_predictions(image):
     """
     prediction = model.predict(image)[0]
     sorted_indices = np.argsort(prediction)[::-1]  # Sort top to bottom.
-    labels = [(lookup_dict.get(i), prediction[i]) for i in sorted_indices]
+    labels = [(lookup[i]['label'], prediction[i])
+              for i in sorted_indices]
     truncated_predictions = labels[:NUM_RESULTS]
     return truncated_predictions
 
@@ -101,6 +108,7 @@ def predict():
             image = Image.open(io.BytesIO(image))
 
             # Pre-process the image and prepare it for classification:
+            print(type(image))
             image = prepare_image(image)
 
             # Classify the input image and then initialize the list
