@@ -11,6 +11,7 @@ To test:
 curl -X POST -F image=@Dodge-Ram_Pickup_3500-2009.jpg http://localhost:5000/predict
 """
 
+from collections import Counter
 import io
 import json
 import os
@@ -87,11 +88,48 @@ def load_predictions(image: np.ndarray) -> list:
     :return: Ranked list of labels.
     """
     prediction = model.predict(image)[0]
-    sorted_indices = np.argsort(prediction)[::-1]  # Sort top to bottom.
-    labels = [(lookup[i]['label'], prediction[i])
-              for i in sorted_indices]
-    truncated_predictions = labels[:NUM_RESULTS]
-    return truncated_predictions
+
+    # Indices sorted from most to least likely predictions:
+    sorted_indices = np.argsort(prediction)[::-1]
+
+    # Sort labels, probabilities and bodies associated with the prediction:
+    labels = []
+    probs = []
+    bodies = []
+    for i in sorted_indices:
+        label = lookup.get(i, {}).get('label', 'unknown')
+        labels.append(label)
+        probs.append(prediction[i])
+        body = lookup.get(i, {}).get('body_style', 'NA')
+        bodies.append(body)
+
+    # Find the most common bodies within the probability PERCENT_CUTOFF:
+    i = 0
+    total_prob = 0
+    top_bodies = []
+    while total_prob < PERCENT_CUTOFF/100:
+        top_bodies.append(bodies[i])
+        total_prob += probs[i]
+        i += 1
+    body_count = Counter(top_bodies)
+    most_common_bodies = body_count.most_common(2)
+    most_common_bodies = [tup[0] for tup in most_common_bodies]
+
+    # Select only those labels whose bodies match the most_common_bodies:
+    consensus_labels = []
+    consensus_probabilities = []
+    for j, label in enumerate(labels):
+        if bodies[j] in most_common_bodies:
+            consensus_labels.append(label)
+            consensus_probabilities.append(probs[j])
+
+    consensus = list(zip(consensus_labels, consensus_probabilities))
+    print(consensus)
+
+    # Truncate results based on NUM_RESULTS:
+    truncated_consensus = consensus[:NUM_RESULTS]
+
+    return truncated_consensus
 
 
 @app.route("/predict", methods=["POST"])
