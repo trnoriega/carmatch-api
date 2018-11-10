@@ -1,27 +1,21 @@
-# USAGE
-# python simple_request.py
+"""Script to make a simple request to the flask server."""
 
-# import the necessary packages
 import requests
 
-# initialize the Keras REST API endpoint URL along with the input
-# image path
 KERAS_REST_API_URL = 'http://localhost:5000/predict'
 IMAGE_PATH = 'Dodge-Ram_Pickup_3500-2009.jpg'
 
-# load the input image and construct the payload for the request
+# Load the input image and construct the payload for the request:
 image = open(IMAGE_PATH, 'rb').read()
 payload = {'image': image}
 
-# submit the request
+# Submit the request:
 r = requests.post(KERAS_REST_API_URL, files=payload).json()
 
-# ensure the request was sucessful
+# Ensure the request was successful:
 if r['success']:
-	# loop over the predictions and display them
-	for (i, result) in enumerate(r['predictions']):
-		print(f'{i + 1}. {result["label"]}: {result["probability"]:.4f}')
-
-# otherwise, the request failed
+    # Loop over the predictions and display them
+    for (i, result) in enumerate(r['predictions']):
+        print(f'{i + 1}. {result["label"]}: {result["probability"]:.4f}')
 else:
-	print('Request failed')
+    print('Request failed')

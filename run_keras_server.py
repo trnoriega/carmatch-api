@@ -1,17 +1,4 @@
-"""
-Based on:
-https://blog.keras.io/building-a-simple-keras-deep-learning-rest-api.html
-and,
-https://github.com/tensorflow/tensorflow/issues/14356#issuecomment-385962623
-
-To run:
-> python run_keras_server.py
-
-To test:
-> curl -X POST -F image=@Dodge-Ram_Pickup_3500-2009.jpg http://localhost:5000/predict
-or
-> python simple_request
-"""
+"""Server script. Loads model and makes predictions."""
 
 from collections import Counter
 import io
@@ -38,7 +25,7 @@ PERCENT_CUTOFF = 95
 NUM_RESULTS = 5
 IMG_WIDTH, IMG_HEIGHT = 299, 299
 
-# initialize our Flask application and the Keras model
+# Initialize our Flask application and the Keras model:
 app = flask.Flask(__name__)
 model = None
 graph = None
@@ -69,17 +56,20 @@ def _load_lookup() -> Dict[int, str]:
     return dictionary
 
 
-@app.route("/predict", methods=["POST"])
+@app.route('/predict', methods=['POST'])
 def predict() -> flask.Response:
-    # initialize the data dictionary that will be returned from the
-    # view
+    """Interprets the POST request image and makes a prediction.
+
+    :return: a response JSON object with the predictions.
+    """
+    # Initialize the data dictionary that will be returned from the view:
     data = {"success": False}
 
-    # ensure an image was properly uploaded to our endpoint
-    if flask.request.method == "POST":
-        if flask.request.files.get("image"):
+    # Ensure an image was properly uploaded to our endpoint:
+    if flask.request.method == 'POST':
+        if flask.request.files.get('image'):
             # read the image in PIL format
-            image = flask.request.files["image"].read()
+            image = flask.request.files['image'].read()
             image = Image.open(io.BytesIO(image))
 
             # Pre-process the image and prepare it for classification:
@@ -90,28 +80,29 @@ def predict() -> flask.Response:
             with graph.as_default():
                 predictions = _load_predictions(image)
 
-            data["predictions"] = []
+            data['predictions'] = []
 
             # Loop over the results and add them to the list of
             # returned predictions:
             for label, probability in predictions:
-                r = {"label": label, "probability": float(probability)}
-                data["predictions"].append(r)
+                r = {'label': label, 'probability': float(probability)}
+                data['predictions'].append(r)
 
             # Indicate that the request was a success:
-            data["success"] = True
+            data['success'] = True
 
-    # return the data dictionary as a JSON response
     return flask.jsonify(data)
 
 
 def _prepare_image(image: Image) -> np.ndarray:
+    """Converts image found in image_path to a numpy array that can be used
+    by Keras model to make a prediction.
+
+    :param image: Image already preprocessed by PIL.
+    :return: Array of processed image values.
     """
-    Converts image found in image_path to a numpy array that
-    can be used by Keras model to make a prediction
-    """
-    if image.mode != "RGB":
-        image = image.convert("RGB")
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
     # Resize the input image and pre-process it:
     image = image.resize((IMG_HEIGHT, IMG_WIDTH))
     image = img_to_array(image)
@@ -121,7 +112,7 @@ def _prepare_image(image: Image) -> np.ndarray:
 
 
 def _load_predictions(image: np.ndarray) -> List[Tuple[str, float]]:
-    """Loads predictions made by model
+    """Loads predictions made by model.
 
     :param image: Image to predict.
     :return: Ranked list of labels and their probabilities.
@@ -170,10 +161,9 @@ def _load_predictions(image: np.ndarray) -> List[Tuple[str, float]]:
     return truncated_consensus
 
 
-# if this is the main thread of execution first load the model and
-# then start the server
-if __name__ == "__main__":
-    print(("* Loading Keras model and Flask starting server..."
-           "please wait until server has fully started"))
+# If this is the main thread of execution load the model and start the server:
+if __name__ == '__main__':
+    print(('* Loading Keras model and Flask starting server...'
+           'please wait until server has fully started'))
     load_model()
     app.run()
