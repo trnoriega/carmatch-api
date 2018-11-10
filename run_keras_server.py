@@ -17,6 +17,7 @@ from collections import Counter
 import io
 import json
 import os
+from typing import Dict, List, Tuple
 
 import flask
 from keras.models import model_from_json
@@ -54,13 +55,13 @@ def load_model():
     model.load_weights(WEIGHT_PATH)
 
     global lookup
-    lookup = load_lookup()
+    lookup = _load_lookup()
 
     global graph
     graph = tf.get_default_graph()
 
 
-def load_lookup() -> dict:
+def _load_lookup() -> Dict[int, str]:
     """Returns prediction lookup dictionary."""
     with open(LOOKUP_PATH, 'r') as f:
         dictionary = json.load(f)
@@ -68,7 +69,43 @@ def load_lookup() -> dict:
     return dictionary
 
 
-def prepare_image(image: 'PIL.JpegImagePlugin.JpegImageFile') -> np.ndarray:
+@app.route("/predict", methods=["POST"])
+def predict() -> flask.Response:
+    # initialize the data dictionary that will be returned from the
+    # view
+    data = {"success": False}
+
+    # ensure an image was properly uploaded to our endpoint
+    if flask.request.method == "POST":
+        if flask.request.files.get("image"):
+            # read the image in PIL format
+            image = flask.request.files["image"].read()
+            image = Image.open(io.BytesIO(image))
+
+            # Pre-process the image and prepare it for classification:
+            image = _prepare_image(image)
+
+            # Classify the input image and then initialize the list
+            # of predictions to return to the client:
+            with graph.as_default():
+                predictions = _load_predictions(image)
+
+            data["predictions"] = []
+
+            # Loop over the results and add them to the list of
+            # returned predictions:
+            for label, probability in predictions:
+                r = {"label": label, "probability": float(probability)}
+                data["predictions"].append(r)
+
+            # Indicate that the request was a success:
+            data["success"] = True
+
+    # return the data dictionary as a JSON response
+    return flask.jsonify(data)
+
+
+def _prepare_image(image: Image) -> np.ndarray:
     """
     Converts image found in image_path to a numpy array that
     can be used by Keras model to make a prediction
@@ -83,11 +120,11 @@ def prepare_image(image: 'PIL.JpegImagePlugin.JpegImageFile') -> np.ndarray:
     return image
 
 
-def load_predictions(image: np.ndarray) -> list:
+def _load_predictions(image: np.ndarray) -> List[Tuple[str, float]]:
     """Loads predictions made by model
 
     :param image: Image to predict.
-    :return: Ranked list of labels.
+    :return: Ranked list of labels and their probabilities.
     """
     prediction = model.predict(image)[0]
 
@@ -126,49 +163,11 @@ def load_predictions(image: np.ndarray) -> list:
             consensus_probabilities.append(probs[j])
 
     consensus = list(zip(consensus_labels, consensus_probabilities))
-    print(consensus)
 
     # Truncate results based on NUM_RESULTS:
     truncated_consensus = consensus[:NUM_RESULTS]
 
     return truncated_consensus
-
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    # initialize the data dictionary that will be returned from the
-    # view
-    data = {"success": False}
-
-    # ensure an image was properly uploaded to our endpoint
-    if flask.request.method == "POST":
-        if flask.request.files.get("image"):
-            # read the image in PIL format
-            image = flask.request.files["image"].read()
-            image = Image.open(io.BytesIO(image))
-
-            # Pre-process the image and prepare it for classification:
-            print(type(image))
-            image = prepare_image(image)
-
-            # Classify the input image and then initialize the list
-            # of predictions to return to the client:
-            with graph.as_default():
-                predictions = load_predictions(image)
-
-            data["predictions"] = []
-
-            # Loop over the results and add them to the list of
-            # returned predictions:
-            for label, probability in predictions:
-                r = {"label": label, "probability": float(probability)}
-                data["predictions"].append(r)
-
-            # Indicate that the request was a success:
-            data["success"] = True
-
-    # return the data dictionary as a JSON response
-    return flask.jsonify(data)
 
 
 # if this is the main thread of execution first load the model and
